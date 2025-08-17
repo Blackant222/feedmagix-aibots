@@ -59,6 +59,10 @@ class CoordinatorBot {
       this.handleConversationStarted(conversation);
     });
     
+    this.atomCommunication.on('messageSent', (message) => {
+      this.handleATOMMessage(message);
+    });
+    
     this.atomCommunication.on('ceoEscalation', (escalation) => {
       this.handleCEOEscalation(escalation);
     });
@@ -641,10 +645,19 @@ ${Object.entries(roles).filter(([id]) => id !== 'coordinator').map(([id, member]
               agent1,
               agent2,
               'team_bonding',
-              { topic: randomTopic, chatId }
+              { topic: randomTopic, chatId, relayToTelegram: true }
             );
             
             console.log(`Team bonding conversation started: ${conversationId}`);
+            
+            // Send initial topic message to get the conversation started
+            await this.atomCommunication.sendMessage(
+              conversationId,
+              agent1,
+              `سلام ${agent2}! ${randomTopic}`,
+              'text'
+            );
+            
           } catch (error) {
             console.error(`Error starting bonding conversation between ${agent1} and ${agent2}:`, error);
           }
@@ -887,6 +900,25 @@ Respond with JSON only:
     
     // Could implement agent-specific notification handling here
     // For now, just log the notification
+  }
+
+  async handleATOMMessage(message) {
+    try {
+      const chatId = message.chatId || this.groupChatId;
+      if (chatId && message.content) {
+        const roles = require('../config/roles.json');
+        const senderRole = roles[message.fromAgent];
+        const emoji = senderRole ? senderRole.emoji : '🤖';
+        const senderName = senderRole ? senderRole.name : message.fromAgent;
+        
+        await this.bot.sendMessage(chatId, 
+          `${emoji} **${senderName}**: ${message.content}`,
+          { parse_mode: 'Markdown' }
+        );
+      }
+    } catch (error) {
+      console.error('Error handling ATOM message:', error);
+    }
   }
 
   async provideCEOSummary(chatId, summaryType = 'daily') {

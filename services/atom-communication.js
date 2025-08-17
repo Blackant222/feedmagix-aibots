@@ -101,7 +101,8 @@ class ATOMCommunication extends EventEmitter {
             messageType, // text, task_assignment, help_request, information, decision
             timestamp: new Date(),
             read: false,
-            reactions: []
+            reactions: [],
+            chatId: conversation.context?.chatId // Include chatId for Telegram relay
         };
 
         conversation.messages.push(message);
@@ -113,6 +114,7 @@ class ATOMCommunication extends EventEmitter {
             await this.notifyAgent(participant, message);
         }
 
+        // Emit message with chatId for Telegram relay
         this.emit('messageSent', message);
         
         // Auto-generate response if appropriate
