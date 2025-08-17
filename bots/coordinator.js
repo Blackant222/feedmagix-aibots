@@ -254,15 +254,23 @@ class CoordinatorBot {
 
   async routeToSpecificAgent(agentId, message, context) {
     try {
-      const response = await this.services.openai.generateResponse(
-        agentId,
-        message,
-        context,
-        'text'
-      );
+      const agentBot = this.services.bots[agentId];
+      if (!agentBot) {
+        await this.bot.sendMessage(context.chatId, `❌ Agent "${agentId}" not found`);
+        return;
+      }
+
+      // Let the individual agent generate their own response
+      const response = await agentBot.receiveMessage(message, {
+        ...context,
+        messageType: 'text'
+      });
       
       if (response) {
-        await this.bot.sendMessage(context.chatId, `🤖 ${agentId}: ${response}`);
+        const roles = require('../config/roles.json');
+        const agent = roles[agentId];
+        // Agent sends their own message through their bot
+        await agentBot.bot.sendMessage(context.chatId, `${agent.emoji} ${response}`);
       }
     } catch (error) {
       console.error(`Error routing to ${agentId}:`, error);
@@ -272,25 +280,31 @@ class CoordinatorBot {
 
   async facilitateMultiAgentResponse(agents, message, context) {
     const responses = [];
+    const roles = require('../config/roles.json');
     
     for (const agentId of agents) {
       try {
+        const agentBot = this.services.bots[agentId];
+        if (!agentBot) {
+          console.error(`Agent bot ${agentId} not found`);
+          continue;
+        }
+
         const agentContext = {
           ...context,
           collaborativeTask: true,
-          otherAgents: agents.filter(a => a !== agentId)
+          otherAgents: agents.filter(a => a !== agentId),
+          messageType: 'text'
         };
         
-        const response = await this.services.openai.generateResponse(
-          agentId,
-          message,
-          agentContext,
-          'text'
-        );
+        // Let each agent generate their own response
+        const response = await agentBot.receiveMessage(message, agentContext);
         
         if (response) {
           responses.push({ agent: agentId, response });
-          await this.bot.sendMessage(context.chatId, `🤖 ${agentId}: ${response}`);
+          const agent = roles[agentId];
+          // Each agent sends their own message through their bot
+          await agentBot.bot.sendMessage(context.chatId, `${agent.emoji} ${response}`);
           
           // Small delay between responses
           await new Promise(resolve => setTimeout(resolve, 1500));
@@ -475,13 +489,14 @@ ${Object.entries(roles).filter(([id]) => id !== 'coordinator').map(([id, member]
     // Detect message type
     const messageType = msg.voice ? 'voice' : 'text';
     
-    // Generate response
-    const response = await this.services.openai.generateResponse(
-      agentId, 
-      message, 
-      { conversation: context, ...agentMemory },
+    // Let the individual agent generate their own response
+    const response = await agentBot.receiveMessage(message, {
+      conversation: context,
+      ...agentMemory,
+      userId: msg.from.id,
+      chatId: msg.chat.id,
       messageType
-    );
+    });
 
     // Update context
     context.messages.push(
@@ -580,21 +595,26 @@ ${Object.entries(roles).filter(([id]) => id !== 'coordinator').map(([id, member]
       
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      // Each agent introduces themselves with AI-generated responses
+      // Each agent introduces themselves with their own AI brain
       const agents = ['sara', 'amir', 'laleh', 'navid', 'neda'];
       for (const agentId of agents) {
         try {
-          const introPrompt = `تو ${roles[agentId].name} هستی. خودت رو به صورت دوستانه و حرفه‌ای معرفی کن. شامل:\n- نقشت در تیم\n- تخصصت\n- چطور می‌تونی کمک کنی\n\nکوتاه و جذاب باش!`;
-          
-          const introduction = await this.services.openai.generateResponse(
-            agentId,
-            introPrompt,
-            { userId: msg.from.id, chatId: msg.chat.id, isIntroduction: true },
-            'text'
-          );
-          
-          if (introduction) {
-            await this.bot.sendMessage(msg.chat.id, `${roles[agentId].emoji} ${introduction}`);
+          const agentBot = this.services.bots[agentId];
+          if (agentBot) {
+            const introPrompt = `تو ${roles[agentId].name} هستی. خودت رو به صورت دوستانه و حرفه‌ای معرفی کن. شامل:\n- نقشت در تیم\n- تخصصت\n- چطور می‌تونی کمک کنی\n\nکوتاه و جذاب باش!`;
+            
+            // Let each agent generate their own introduction
+            const introduction = await agentBot.receiveMessage(introPrompt, {
+              userId: msg.from.id,
+              chatId: msg.chat.id,
+              isIntroduction: true,
+              messageType: 'text'
+            });
+            
+            if (introduction) {
+              // Each agent sends their own message through their bot
+              await agentBot.bot.sendMessage(msg.chat.id, `${roles[agentId].emoji} ${introduction}`);
+            }
           }
           
           // Delay between introductions
@@ -706,8 +726,7 @@ Respond with JSON only:
   "description": "brief task description"
 }`;
 
-      const response = await this.services.openai.generateResponse(prompt, {
-        agentId: 'coordinator',
+      const response = await this.services.googleAI.generateResponse('coordinator', prompt, {
         priority: 'high',
         context: 'task_analysis'
       });

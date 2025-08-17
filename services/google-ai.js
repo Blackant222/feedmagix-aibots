@@ -7,8 +7,11 @@ class GoogleAIService {
 
   // Cost-optimized model routing with latest Google models
   selectModel(task, agentId, priority = false) {
+    // Ensure task is a string
+    const taskStr = typeof task === 'string' ? task : String(task || '');
+    
     // High priority tasks - use Gemini 2.5 Pro without search (not supported)
-    if (priority || agentId === 'neda' || task.includes('research') || task.includes('search') || task.includes('trends')) {
+    if (priority || agentId === 'neda' || taskStr.includes('research') || taskStr.includes('search') || taskStr.includes('trends')) {
       return {
         model: 'gemini-2.5-pro',
         useSearch: false,
@@ -19,7 +22,7 @@ class GoogleAIService {
     }
 
     // Important agents - use Gemini 2.5 Flash without search (not supported)
-    if (agentId === 'sara' || agentId === 'coordinator' || task.includes('strategy') || task.includes('plan')) {
+    if (agentId === 'sara' || agentId === 'coordinator' || taskStr.includes('strategy') || taskStr.includes('plan')) {
       return {
         model: 'gemini-2.5-flash',
         useSearch: false,
@@ -29,20 +32,12 @@ class GoogleAIService {
       };
     }
 
-    // Regular tasks - use Gemini 2.0 Flash with search
+    // Regular tasks - use Gemini 2.0 Flash without search (not supported)
     return {
       model: 'gemini-2.0-flash',
-      useSearch: true,
+      useSearch: false,
       config: {
-        thinkingConfig: { thinkingBudget: -1 },
-        tools: [{ 
-          googleSearchRetrieval: {
-            dynamicRetrievalConfig: {
-              mode: 'MODE_DYNAMIC',
-              dynamicThreshold: 0.7
-            }
-          }
-        }]
+        thinkingConfig: { thinkingBudget: -1 }
       }
     };
   }
