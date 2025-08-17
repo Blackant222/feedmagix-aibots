@@ -8,10 +8,15 @@
     "dev": "nodemon server.js"
   },
   "dependencies": {
+    "@google-cloud/documentai": "^9.3.0",
+    "@google-cloud/storage": "^7.16.0",
+    "@google/genai": "^1.14.0",
     "@google/generative-ai": "^0.21.0",
     "@supabase/supabase-js": "^2.39.0",
     "dotenv": "^16.4.1",
     "express": "^4.18.2",
+    "google-auth-library": "^10.2.1",
+    "googleapis": "^156.0.0",
     "node-telegram-bot-api": "^0.66.0",
     "redis": "^4.6.5"
   },
