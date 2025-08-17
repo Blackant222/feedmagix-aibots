@@ -1,0 +1,46 @@
+{
+  "company": {
+    "name": "PetMagix",
+    "location": "District 22, Iran Mall, Level G0, 708 Co-Work Space, Tehran, Iran",
+    "vision": "Become the go-to super app for every pet owner",
+    "approach": "Micro-startup / SaaS-based - each service as independent micro-saas"
+  },
+  "flagship_product": {
+    "name": "FeedMagix", 
+    "description": "AI-powered pet food recommendation system",
+    "process": [
+      "Take photo of pet food label",
+      "Multi-AI agentic system analysis", 
+      "Find product details online",
+      "Cross-check internal pet food database",
+      "Compare against pet profile",
+      "Give simple Yes/No decision with score and insight"
+    ],
+    "status": "MVP near completion"
+  },
+  "current_metrics": {
+    "instagram": "@petmagix.ir",
+    "followers": "~6k",
+    "website": "petmagix.com"
+  },
+  "founder": {
+    "name": "Arshia Tehrani",
+    "birth_year": 2000,
+    "background": "Serial entrepreneur - pet e-commerce, pet services, human lab-testing startups"
+  },
+  "goals": {
+    "short_term": [
+      "Launch FeedMagix",
+      "Acquire early users and feedback", 
+      "Define monetization models"
+    ],
+    "long_term": [
+      "Expand PetMagix super app with multiple AI-powered micro-services",
+      "Build trusted global brand for pet care solutions"
+    ]
+  },
+  "target_market": {
+    "primary": "Persian-speaking pet owners in Iran",
+    "secondary": "Global pet owner community"
+  }
+}

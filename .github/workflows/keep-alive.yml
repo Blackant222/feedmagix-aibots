@@ -1,0 +1,18 @@
+name: Keep Railway App Alive
+
+on:
+  schedule:
+    # Ping every 25 minutes to prevent Railway from sleeping
+    - cron: '*/25 * * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping health endpoint
+        run: |
+          curl -f ${{ secrets.RAILWAY_APP_URL }}/health || exit 1
+          echo "✅ PetMagix AI Team is alive!"
+        env:
+          RAILWAY_APP_URL: ${{ secrets.RAILWAY_APP_URL }}
