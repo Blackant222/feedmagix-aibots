@@ -5,12 +5,12 @@ class GoogleAIService {
     this.genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
   }
 
-  // Cost-optimized model routing with Google models
+  // Cost-optimized model routing with latest Google models
   selectModel(task, agentId, priority = false) {
-    // High priority tasks - use Gemini 2.0 Flash Pro with search
+    // High priority tasks - use Gemini 2.5 Pro with advanced search
     if (priority || agentId === 'neda' || task.includes('research') || task.includes('search') || task.includes('trends')) {
       return {
-        model: 'gemini-2.0-flash-exp',
+        model: 'gemini-2.5-pro',
         useSearch: true,
         config: {
           thinkingConfig: { thinkingBudget: -1 },
@@ -26,10 +26,10 @@ class GoogleAIService {
       };
     }
 
-    // Important agents - use Gemini 2.5 Pro with search
+    // Important agents - use Gemini 2.5 Flash with search
     if (agentId === 'sara' || agentId === 'coordinator' || task.includes('strategy') || task.includes('plan')) {
       return {
-        model: 'gemini-1.5-pro',
+        model: 'gemini-2.5-flash',
         useSearch: true,
         config: {
           thinkingConfig: { thinkingBudget: -1 },
@@ -45,9 +45,9 @@ class GoogleAIService {
       };
     }
 
-    // Regular tasks - use Gemini 2.5 Flash with search
+    // Regular tasks - use Gemini 2.0 Flash with search
     return {
-      model: 'gemini-1.5-flash',
+      model: 'gemini-2.0-flash',
       useSearch: true,
       config: {
         thinkingConfig: { thinkingBudget: -1 },
