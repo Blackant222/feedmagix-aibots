@@ -33,15 +33,42 @@ class SupabaseMemory {
   }
 
   async saveAgentMemory(agentId, memory) {
-    const { error } = await this.client
-      .from('agent_memory')
-      .upsert({
-        agent_id: agentId,
-        ...memory,
-        updated_at: new Date().toISOString()
-      });
-    
-    if (error) console.error('Save agent memory error:', error);
+    try {
+      // First try to update existing record
+      const { data: existingData, error: selectError } = await this.client
+        .from('agent_memory')
+        .select('id')
+        .eq('agent_id', agentId)
+        .single();
+
+      if (existingData) {
+        // Update existing record
+        const { error } = await this.client
+          .from('agent_memory')
+          .update({
+            ...memory,
+            updated_at: new Date().toISOString()
+          })
+          .eq('agent_id', agentId);
+        
+        if (error) console.error('Update agent memory error:', error);
+      } else {
+        // Insert new record
+        const { error } = await this.client
+          .from('agent_memory')
+          .insert({
+            agent_id: agentId,
+            ...memory,
+            updated_at: new Date().toISOString()
+          });
+        
+        if (error && error.code !== '23505') {
+          console.error('Insert agent memory error:', error);
+        }
+      }
+    } catch (error) {
+      console.error('Save agent memory error:', error);
+    }
   }
 
   async getAgentMemory(agentId) {
