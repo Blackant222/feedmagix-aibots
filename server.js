@@ -36,7 +36,7 @@ class PetMagixSystem {
     await this.services.supabase.connect();
 
     // Initialize bots
-    this.initializeBots();
+    await this.initializeBots();
 
     // Setup web server
     this.setupServer();
@@ -47,7 +47,7 @@ class PetMagixSystem {
     console.log('✅ PetMagix AI Team ready!');
   }
 
-  initializeBots() {
+  async initializeBots() {
     const botConfigs = [
       { name: 'coordinator', token: process.env.COORDINATOR_BOT_TOKEN, class: CoordinatorBot },
       { name: 'sara', token: process.env.SARA_BOT_TOKEN, class: SaraBot },
@@ -57,6 +57,7 @@ class PetMagixSystem {
       { name: 'neda', token: process.env.NEDA_BOT_TOKEN, class: NedaBot }
     ];
 
+    // Initialize all bots first
     for (const config of botConfigs) {
       if (config.token) {
         this.services.bots = this.bots; // Pass bots to services
@@ -64,6 +65,21 @@ class PetMagixSystem {
         console.log(`✅ ${config.name} bot initialized`);
       } else {
         console.warn(`⚠️ No token for ${config.name} bot`);
+      }
+    }
+
+    // Enable cross-bot communication after all bots are initialized
+    if (this.bots.coordinator && this.bots.coordinator.enableCrossBotCommunication) {
+      await this.bots.coordinator.enableCrossBotCommunication();
+      console.log('🤝 Cross-bot communication enabled');
+    }
+
+    // Load personalities for all agent bots
+    const agentBots = ['sara', 'amir', 'laleh', 'navid', 'neda'];
+    for (const agentId of agentBots) {
+      if (this.bots[agentId] && this.bots[agentId].loadPersonality) {
+        await this.bots[agentId].loadPersonality();
+        console.log(`🧠 ${agentId} personality loaded`);
       }
     }
   }

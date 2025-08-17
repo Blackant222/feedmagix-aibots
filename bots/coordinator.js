@@ -17,24 +17,8 @@ class CoordinatorBot {
         const canProceed = await this.services.redis.checkRateLimit(msg.from.id);
         if (!canProceed) return;
 
-        // Handle voice messages
-        if (msg.voice) {
-          const fileId = msg.voice.file_id;
-          const file = await this.bot.getFile(fileId);
-          const fileUrl = `https://api.telegram.org/file/bot${process.env.COORDINATOR_BOT_TOKEN}/${file.file_path}`;
-          
-          // Transcribe voice message
-          const transcription = await this.services.openai.transcribeVoice(fileUrl);
-          msg.text = transcription; // Replace voice with transcribed text
-        }
-
-        // Route message
-        const result = await this.routeMessage(msg);
-        
-        // Send response from appropriate agent
-        if (result.targetBot && result.response) {
-          await result.targetBot.sendMessage(msg.chat.id, result.response);
-        }
+        // Process message
+        await this.processMessage(msg);
       } catch (error) {
         console.error('Coordinator error:', error);
         await this.bot.sendMessage(msg.chat.id, '🤖 مشکل فنی موقت. لطفاً دوباره تلاش کنید.');
@@ -45,6 +29,150 @@ class CoordinatorBot {
     this.bot.onText(/\/start/, (msg) => this.handleStart(msg));
     this.bot.onText(/\/status/, (msg) => this.handleStatus(msg));
     this.bot.onText(/\/briefing/, (msg) => this.handleBriefing(msg));
+    this.bot.onText(/\/team_intro/, (msg) => this.handleTeamIntro(msg));
+  }
+
+  async processMessage(msg) {
+    try {
+      const messageText = msg.text || '';
+      const chatId = msg.chat.id;
+      const userId = msg.from.id;
+      
+      // Handle voice messages
+      if (msg.voice) {
+        const fileId = msg.voice.file_id;
+        const file = await this.bot.getFile(fileId);
+        const fileUrl = `https://api.telegram.org/file/bot${process.env.COORDINATOR_BOT_TOKEN}/${file.file_path}`;
+        
+        const transcription = await this.services.openai.transcribeVoice(fileUrl);
+        if (transcription) {
+          msg.text = transcription;
+          await this.bot.sendMessage(chatId, `🎤 متن پیام صوتی: "${transcription}"`);
+        }
+      }
+
+      // Route to specific agent based on commands or natural mentions
+      const routedAgent = this.routeMessageToAgent(messageText);
+      
+      if (routedAgent && routedAgent !== 'coordinator') {
+        // Get the specific bot instance and generate response
+        const botInstance = this.getBotInstance(routedAgent);
+        if (botInstance && botInstance.generateResponse) {
+          const response = await botInstance.generateResponse(
+            messageText,
+            { userId, chatId, fromCoordinator: true }
+          );
+          
+          if (response) {
+            await this.bot.sendMessage(chatId, response);
+          }
+        } else {
+          // Fallback to OpenAI service
+          const response = await this.services.openai.generateResponse(
+            routedAgent,
+            messageText,
+            { userId, chatId },
+            'text'
+          );
+          
+          if (response) {
+            await this.bot.sendMessage(chatId, response);
+          }
+        }
+      } else {
+        // Handle as coordinator with enhanced personality
+        const response = await this.generateCoordinatorResponse(messageText, { userId, chatId });
+        
+        if (response) {
+          await this.bot.sendMessage(chatId, response);
+        }
+      }
+      
+      // Update conversation context
+      await this.services.redis.setConversationContext(userId, {
+        lastMessage: messageText,
+        timestamp: Date.now(),
+        agent: routedAgent || 'coordinator'
+      });
+      
+    } catch (error) {
+      console.error('Error processing message:', error);
+      await this.bot.sendMessage(msg.chat.id, '❌ خطایی در پردازش پیام رخ داد.');
+    }
+  }
+
+  getBotInstance(agentId) {
+    // Return the actual bot instance from services
+    return this.services.bots && this.services.bots[agentId] ? this.services.bots[agentId] : null;
+  }
+
+  async generateCoordinatorResponse(message, context) {
+    const roles = require('../config/roles.json');
+    const companyProfile = require('../config/company-profile.json');
+    
+    const systemPrompt = `تو ${roles.coordinator.name} هستی، ${roles.coordinator.role} تیم PetMagix.
+
+شخصیت تو: ${roles.coordinator.personality}
+
+تمرکز فعلی: ${roles.coordinator.current_focus}
+
+اطلاعات شرکت:
+- نام: ${companyProfile.company.name}
+- محصول اصلی: ${companyProfile.flagship_product.name}
+- هدف: ${companyProfile.company.vision}
+- وضعیت محصول: ${companyProfile.flagship_product.status}
+
+تیم تو:
+${Object.entries(roles).filter(([id]) => id !== 'coordinator').map(([id, member]) => 
+  `- ${member.name} (${member.role}): ${member.current_focus}`
+).join('\n')}
+
+تو رهبر این تیم هستی و مسئول هماهنگی و مدیریت پروژه‌ها. همیشه از اطلاعات تیم و شرکت استفاده کن و به صورت حرفه‌ای و دوستانه پاسخ بده.`;
+
+    return await this.services.openai.generateResponse(
+      'coordinator',
+      message,
+      { ...context, systemPrompt },
+      'text'
+    );
+  }
+
+  routeMessageToAgent(text) {
+    const lowerText = text.toLowerCase();
+    
+    // Direct command: @agent task
+    const commandMatch = lowerText.match(/@(\w+)\s+(.+)/);
+    if (commandMatch) {
+      return commandMatch[1];
+    }
+
+    // Natural mentions
+    const agents = ['sara', 'amir', 'laleh', 'navid', 'neda'];
+    for (const agent of agents) {
+      if (lowerText.includes(agent)) {
+        return agent;
+      }
+    }
+
+    // Auto-route based on keywords
+    if (lowerText.includes('marketing') || lowerText.includes('campaign')) {
+      return 'sara';
+    }
+    if (lowerText.includes('copy') || lowerText.includes('content')) {
+      return 'amir';
+    }
+    if (lowerText.includes('analytics') || lowerText.includes('data')) {
+      return 'laleh';
+    }
+    if (lowerText.includes('plan') || lowerText.includes('sprint')) {
+      return 'navid';
+    }
+    if (lowerText.includes('research') || lowerText.includes('market')) {
+      return 'neda';
+    }
+
+    // Default to coordinator
+    return 'coordinator';
   }
 
   async routeMessage(msg) {
@@ -85,6 +213,39 @@ class CoordinatorBot {
 
     // Default coordinator response
     return await this.coordinatorResponse(msg);
+  }
+
+  // Enable cross-bot communication
+  async enableCrossBotCommunication() {
+    const agents = ['sara', 'amir', 'laleh', 'navid', 'neda'];
+    
+    for (const agentId of agents) {
+      const botInstance = this.getBotInstance(agentId);
+      if (botInstance && botInstance.setCoordinator) {
+        botInstance.setCoordinator(this);
+      }
+    }
+  }
+
+  // Method for bots to communicate with each other through coordinator
+  async facilitateCrossBotMessage(fromAgent, toAgent, message, context = {}) {
+    const toBotInstance = this.getBotInstance(toAgent);
+    
+    if (toBotInstance && toBotInstance.receiveMessage) {
+      return await toBotInstance.receiveMessage(message, {
+        ...context,
+        fromAgent,
+        facilitatedByCoordinator: true
+      });
+    }
+    
+    // Fallback to OpenAI service
+    return await this.services.openai.generateResponse(
+      toAgent,
+      message,
+      { ...context, fromAgent, facilitatedByCoordinator: true },
+      'text'
+    );
   }
 
   async routeToAgent(agentId, message, msg) {
@@ -142,11 +303,13 @@ class CoordinatorBot {
 
   async handleStart(msg) {
     if (msg.chat.id.toString() === this.groupChatId) {
+      const roles = require('../config/roles.json');
       await this.bot.sendMessage(msg.chat.id, 
-        '🚀 PetMagix AI Team activated!\n\n' +
-        'Team: Sara🎯 Amir✍️ Laleh📊 Navid⚙️ Neda🔍\n' +
-        'Commands: /status /briefing\n' +
-        'Usage: @sara create campaign OR mention names directly'
+        '🚀 تیم PetMagix آماده و آنلاین!\n\n' +
+        `تیم ما: ${roles.sara.name}🎯 ${roles.amir.name}✍️ ${roles.laleh.name}📊 ${roles.navid.name}⚙️ ${roles.neda.name}🔍\n\n` +
+        'دستورات: /status /briefing /team_intro\n' +
+        'استفاده: @sara کمپین بساز یا مستقیم اسم بچه‌ها رو صدا بزن\n\n' +
+        'ما یه تیم واقعی هستیم که با هم کار می‌کنیم تا PetMagix رو به بهترین برند حیوانات خانگی تبدیل کنیم! 🐾'
       );
     }
   }
@@ -154,13 +317,18 @@ class CoordinatorBot {
   async handleStatus(msg) {
     if (msg.chat.id.toString() === this.groupChatId) {
       const agents = ['sara', 'amir', 'laleh', 'navid', 'neda'];
-      let status = '📊 Team Status:\n\n';
+      const roles = require('../config/roles.json');
+      let status = '📊 وضعیت تیم PetMagix:\n\n';
       
       for (const agentId of agents) {
         const tasks = await this.services.mongo.getActiveTasks(agentId);
-        const roles = require('../config/roles.json');
-        status += `${roles[agentId].emoji} ${roles[agentId].name}: ${tasks.length} active tasks\n`;
+        status += `${roles[agentId].emoji} ${roles[agentId].name}: ${tasks.length} کار فعال\n`;
+        status += `   تمرکز فعلی: ${roles[agentId].current_focus}\n\n`;
       }
+      
+      status += '🎯 هدف کلی: راه‌اندازی موفق FeedMagix\n';
+      status += '📈 وضعیت اینستاگرام: @petmagix.ir (~6k فالوور)\n';
+      status += '🚀 مرحله فعلی: نهایی کردن MVP';
       
       await this.bot.sendMessage(msg.chat.id, status);
     }
@@ -175,15 +343,54 @@ class CoordinatorBot {
         await this.services.mongo.initializeTeamBriefing(companyProfile, roles);
         
         await this.bot.sendMessage(msg.chat.id, 
-          '📋 Team briefing complete!\n\n' +
-          '✅ Company profile loaded\n' +
-          '✅ Agent personalities initialized\n' +
-          '✅ PetMagix context distributed\n\n' +
-          'Your AI team is now fully briefed and ready! 🐾'
+          '📋 بریفینگ تیم کامل شد!\n\n' +
+          '✅ پروفایل شرکت بارگذاری شد\n' +
+          '✅ شخصیت‌های اعضای تیم فعال شد\n' +
+          '✅ اطلاعات PetMagix به همه رسید\n' +
+          '✅ روابط تیمی و همکاری‌ها تنظیم شد\n\n' +
+          'تیم AI شما حالا کاملاً آماده و با اطلاعات کامل! 🐾\n' +
+          'همه بچه‌ها از یکدیگر، از شرکت، و از اهدافمون باخبرن!'
         );
       } catch (error) {
-        await this.bot.sendMessage(msg.chat.id, '❌ Briefing failed. Check logs.');
+        await this.bot.sendMessage(msg.chat.id, '❌ بریفینگ ناموفق. لاگ‌ها رو چک کن.');
       }
+    }
+  }
+
+  async handleTeamIntro(msg) {
+    if (msg.chat.id.toString() === this.groupChatId) {
+      const roles = require('../config/roles.json');
+      
+      // Send coordinator intro first
+      await this.bot.sendMessage(msg.chat.id, 
+        `🤖 ${roles.coordinator.greeting}\n\n` +
+        `📋 ${roles.coordinator.background}\n` +
+        `🎯 ${roles.coordinator.current_focus}`
+      );
+      
+      // Then trigger each team member to introduce themselves
+      const agents = ['sara', 'amir', 'laleh', 'navid', 'neda'];
+      for (const agentId of agents) {
+        const agent = roles[agentId];
+        await this.bot.sendMessage(msg.chat.id, 
+          `${agent.emoji} ${agent.greeting}\n\n` +
+          `📋 ${agent.background}\n` +
+          `🎯 ${agent.current_focus}\n\n` +
+          `🤝 همکاری‌هام:\n` +
+          Object.entries(agent.team_relationships).map(([teammate, relationship]) => 
+            `• ${roles[teammate].name}: ${relationship}`
+          ).join('\n')
+        );
+        
+        // Small delay between introductions
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+      
+      await this.bot.sendMessage(msg.chat.id, 
+        '🎉 معرفی تیم تمام شد!\n\n' +
+        'حالا که همه رو شناختید، می‌تونید مستقیم با هر کدوم کار کنید.\n' +
+        'ما یه تیم واقعی هستیم که با هم برای موفقیت PetMagix تلاش می‌کنیم! 💪🐾'
+      );
     }
   }
 }
