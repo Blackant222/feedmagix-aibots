@@ -4,8 +4,7 @@ const express = require('express');
 // Services
 const RedisMemory = require('./memory/redis');
 const SupabaseMemory = require('./memory/mongo'); // Renamed but keeping same path for compatibility
-const OpenAIService = require('./services/openai');
-const OpenRouterService = require('./services/openrouter');
+const GoogleAIService = require('./services/google-ai');
 
 // Bots
 const CoordinatorBot = require('./bots/coordinator');
@@ -30,8 +29,8 @@ class PetMagixSystem {
     this.services.redis = new RedisMemory();
     this.services.supabase = new SupabaseMemory();
     this.services.mongo = this.services.supabase; // Alias for compatibility
-    this.services.openai = new OpenAIService();
-    this.services.openrouter = new OpenRouterService();
+    this.services.googleai = new GoogleAIService(); // Primary AI service
+    this.services.openai = this.services.googleai; // Alias for compatibility
 
     await this.services.redis.connect();
     await this.services.supabase.connect();
@@ -103,13 +102,14 @@ class PetMagixSystem {
       if (this.bots.coordinator && process.env.GROUP_CHAT_ID) {
         await this.bots.coordinator.bot.sendMessage(
           process.env.GROUP_CHAT_ID,
-          '🎯 PetMagix AI Team briefing complete!\n\n' +
+          '🚀 PetMagix AI Team powered by Google Gemini!\n\n' +
           '✅ Company profile loaded\n' +
           '✅ Agent personalities initialized\n' +
-          '✅ FeedMagix context distributed\n\n' +
+          '✅ Google Search integration active\n' +
+          '✅ Real-time market intelligence ready\n\n' +
           'Your AI team is ready to help grow PetMagix! 🐾\n\n' +
-          'Try: @sara create Instagram campaign\n' +
-          'Or: Sara, what\'s our marketing strategy?'
+          'Try: @sara research Instagram trends for pet brands\n' +
+          'Or: @neda find latest pet food market data'
         );
       }
     } catch (error) {
