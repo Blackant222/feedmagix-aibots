@@ -14,7 +14,14 @@ class GoogleAIService {
         useSearch: true,
         config: {
           thinkingConfig: { thinkingBudget: -1 },
-          tools: [{ googleSearch: {} }]
+          tools: [{ 
+            googleSearchRetrieval: {
+              dynamicRetrievalConfig: {
+                mode: 'MODE_DYNAMIC',
+                dynamicThreshold: 0.7
+              }
+            }
+          }]
         }
       };
     }
@@ -26,7 +33,14 @@ class GoogleAIService {
         useSearch: true,
         config: {
           thinkingConfig: { thinkingBudget: -1 },
-          tools: [{ googleSearch: {} }]
+          tools: [{ 
+            googleSearchRetrieval: {
+              dynamicRetrievalConfig: {
+                mode: 'MODE_DYNAMIC',
+                dynamicThreshold: 0.7
+              }
+            }
+          }]
         }
       };
     }
@@ -37,7 +51,14 @@ class GoogleAIService {
       useSearch: true,
       config: {
         thinkingConfig: { thinkingBudget: -1 },
-        tools: [{ googleSearch: {} }]
+        tools: [{ 
+          googleSearchRetrieval: {
+            dynamicRetrievalConfig: {
+              mode: 'MODE_DYNAMIC',
+              dynamicThreshold: 0.7
+            }
+          }
+        }]
       }
     };
   }
