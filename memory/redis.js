@@ -43,6 +43,14 @@ class RedisMemory {
     return await this.get(`context:${chatId}`) || { messages: [] };
   }
 
+  async setConversationContext(userId, context) {
+    await this.set(`conversation:${userId}`, context, 86400); // 24h
+  }
+
+  async getConversationContext(userId) {
+    return await this.get(`conversation:${userId}`) || {};
+  }
+
   async checkRateLimit(userId, limit = 30) {
     const key = `rate:${userId}`;
     const current = await this.client.get(key);
