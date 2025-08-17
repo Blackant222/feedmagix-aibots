@@ -1,4 +1,7 @@
 const TelegramBot = require('node-telegram-bot-api');
+const ATOMTaskManager = require('../services/atom-task-manager');
+const ATOMCommunication = require('../services/atom-communication');
+const ATOMMemory = require('../services/atom-memory');
 
 class CoordinatorBot {
   constructor(token, services) {
@@ -7,7 +10,63 @@ class CoordinatorBot {
     this.bot = new TelegramBot(token, { polling: usePolling });
     this.services = services;
     this.groupChatId = process.env.GROUP_CHAT_ID;
+    this.id = 'coordinator';
+    this.name = 'Coordinator';
+    this.role = 'Team Coordinator & Task Manager';
+    this.agents = ['sara', 'amir', 'laleh', 'navid', 'neda'];
+    
+    // Initialize ATOM systems
+    this.initializeATOMSystems();
     this.setupHandlers();
+  }
+
+  async initializeATOMSystems() {
+    try {
+      // Initialize ATOM Memory System
+      this.atomMemory = new ATOMMemory('./data/atom-memory');
+      
+      // Initialize ATOM Task Manager
+      this.atomTaskManager = new ATOMTaskManager(this.services.openai);
+      
+      // Initialize ATOM Communication System
+      this.atomCommunication = new ATOMCommunication(this.atomTaskManager, this.services.openai);
+      
+      // Set up event listeners for ATOM systems
+      this.setupATOMEventListeners();
+      
+      console.log('ATOM Systems initialized successfully');
+    } catch (error) {
+      console.error('Error initializing ATOM systems:', error);
+    }
+  }
+
+  setupATOMEventListeners() {
+    // Listen for task events
+    this.atomTaskManager.on('taskCreated', (task) => {
+      this.handleTaskCreated(task);
+    });
+    
+    this.atomTaskManager.on('taskAssigned', (assignment) => {
+      this.handleTaskAssigned(assignment);
+    });
+    
+    this.atomTaskManager.on('ceoApprovalRequired', (approval) => {
+      this.handleCEOApprovalRequired(approval);
+    });
+    
+    // Listen for communication events
+    this.atomCommunication.on('conversationStarted', (conversation) => {
+      this.handleConversationStarted(conversation);
+    });
+    
+    this.atomCommunication.on('ceoEscalation', (escalation) => {
+      this.handleCEOEscalation(escalation);
+    });
+    
+    // Listen for agent notifications
+    this.atomCommunication.on('agentNotification', (notification) => {
+      this.handleAgentNotification(notification);
+    });
   }
 
   setupHandlers() {
@@ -53,6 +112,18 @@ class CoordinatorBot {
         }
       }
 
+      // Record interaction in ATOM memory
+      await this.recordUserInteraction(msg);
+      
+      // Check if this is a task-related message
+      const taskIntent = await this.analyzeTaskIntent(messageText);
+      
+      if (taskIntent.isTask) {
+        // Handle as ATOM task
+        await this.handleATOMTask(msg, chatId, taskIntent);
+        return;
+      }
+
       // Smart AI-driven routing with context awareness
       const routingDecision = await this.intelligentRouting(messageText, { userId, chatId });
       
@@ -65,6 +136,12 @@ class CoordinatorBot {
       if (routingDecision.action === 'multi_agent') {
         // Route to multiple agents for collaboration
         await this.facilitateMultiAgentResponse(routingDecision.agents, messageText, { userId, chatId });
+        return;
+      }
+      
+      if (routingDecision.action === 'autonomous_collaboration') {
+        // Initiate autonomous collaboration
+        await this.initiateAutonomousCollaboration(msg, chatId, routingDecision);
         return;
       }
       
@@ -542,41 +619,296 @@ ${Object.entries(roles).filter(([id]) => id !== 'coordinator').map(([id, member]
   
   async initiateTeamBonding(chatId) {
     try {
-      // Random team member starts a conversation
-      const agents = ['sara', 'amir', 'laleh', 'navid', 'neda'];
-      const initiator = agents[Math.floor(Math.random() * agents.length)];
-      const target = agents.filter(a => a !== initiator)[Math.floor(Math.random() * 4)];
+      await this.bot.sendMessage(chatId, '🤝 *Team Bonding Session Initiated*\n\nLet\'s have some autonomous team discussions!', { parse_mode: 'Markdown' });
       
-      const bondingPrompt = `تو ${initiator} هستی. یه پیام دوستانه و کاری به ${target} بفرست. مثلاً درباره یه ایده یا همکاری. کوتاه و طبیعی باش.`;
+      // Create conversation topics for agents to discuss
+      const topics = [
+        'What\'s the most exciting project trend you\'ve noticed lately?',
+        'How can we improve our collaboration as a team?',
+        'What\'s one skill you\'d like to learn from another team member?',
+        'Share a recent success story or lesson learned.'
+      ];
       
-      const message = await this.services.openai.generateResponse(
-        initiator,
-        bondingPrompt,
-        { chatId, teamBonding: true },
-        'text'
-      );
+      const randomTopic = topics[Math.floor(Math.random() * topics.length)];
       
-      if (message) {
-        await this.bot.sendMessage(chatId, `💬 ${initiator} به ${target}: ${message}`);
+      // Initiate peer-to-peer conversations using ATOM Communication
+      for (let i = 0; i < this.agents.length - 1; i++) {
+        const agent1 = this.agents[i];
+        const agent2 = this.agents[i + 1];
         
-        // Target responds
         setTimeout(async () => {
-          const responsePrompt = `تو ${target} هستی. ${initiator} بهت گفت: "${message}". یه جواب مثبت و همکارانه بده.`;
-          
-          const response = await this.services.openai.generateResponse(
-            target,
-            responsePrompt,
-            { chatId, teamBonding: true },
-            'text'
-          );
-          
-          if (response) {
-            await this.bot.sendMessage(chatId, `💬 ${target}: ${response}`);
+          try {
+            const conversationId = await this.atomCommunication.initiateConversation(
+              agent1,
+              agent2,
+              'team_bonding',
+              { topic: randomTopic, chatId }
+            );
+            
+            console.log(`Team bonding conversation started: ${conversationId}`);
+          } catch (error) {
+            console.error(`Error starting bonding conversation between ${agent1} and ${agent2}:`, error);
           }
-        }, 3000);
+        }, i * 3000); // 3 second delay between conversations
+      }
+      
+    } catch (error) {
+      console.error('Error in team bonding:', error);
+    }
+  }
+
+  // ATOM System Methods
+  async recordUserInteraction(message) {
+    try {
+      await this.atomMemory.recordInteraction('coordinator', {
+        type: 'user_message',
+        context: {
+          messageText: message.text,
+          userId: message.from?.id,
+          chatId: message.chat?.id,
+          timestamp: new Date(message.date * 1000)
+        },
+        participants: ['user', 'coordinator'],
+        outcome: { received: true },
+        duration: 0,
+        quality: 0.8
+      });
+    } catch (error) {
+      console.error('Error recording user interaction:', error);
+    }
+  }
+
+  async analyzeTaskIntent(messageText) {
+    try {
+      const prompt = `Analyze this message to determine if it's a task request:
+
+"${messageText}"
+
+Respond with JSON only:
+{
+  "isTask": boolean,
+  "taskType": "create|assign|status|collaborate|help",
+  "priority": "low|medium|high|urgent",
+  "requiredSkills": ["skill1", "skill2"],
+  "requiresCEOApproval": boolean,
+  "description": "brief task description"
+}`;
+
+      const response = await this.services.openai.generateResponse(prompt, {
+        agentId: 'coordinator',
+        priority: 'high',
+        context: 'task_analysis'
+      });
+
+      return JSON.parse(response);
+    } catch (error) {
+      console.error('Error analyzing task intent:', error);
+      return { isTask: false };
+    }
+  }
+
+  async handleATOMTask(message, chatId, taskIntent) {
+    try {
+      if (taskIntent.taskType === 'create') {
+        // Create new task using ATOM Task Manager
+        const task = this.atomTaskManager.createTask({
+          title: taskIntent.description,
+          description: message.text,
+          priority: taskIntent.priority,
+          category: 'user_request',
+          requiredSkills: taskIntent.requiredSkills || [],
+          requiresCEOApproval: taskIntent.requiresCEOApproval || false,
+          createdBy: 'user'
+        });
+
+        await this.bot.sendMessage(chatId, 
+          `✅ *Task Created Successfully*\n\n` +
+          `📋 **Task ID:** ${task.id}\n` +
+          `📝 **Description:** ${task.description}\n` +
+          `⚡ **Priority:** ${task.priority}\n` +
+          `👤 **Assigned to:** ${task.assignedTo}\n` +
+          `🎯 **Status:** ${task.status}`,
+          { parse_mode: 'Markdown' }
+        );
+
+        // Record task creation in memory
+        await this.atomMemory.recordTaskMemory(task.id, 'coordinator', {
+          type: 'creation',
+          content: `Task created from user request: ${task.title}`,
+          importance: 0.8,
+          context: { source: 'user_request', chatId },
+          tags: ['task_creation', 'user_request']
+        });
+
+      } else if (taskIntent.taskType === 'status') {
+        // Get task status
+        const tasks = this.atomTaskManager.getAllTasks();
+        const activeTasks = tasks.filter(t => t.status !== 'completed');
+        
+        if (activeTasks.length === 0) {
+          await this.bot.sendMessage(chatId, '📋 No active tasks at the moment.');
+        } else {
+          let statusMessage = '📋 *Active Tasks Status:*\n\n';
+          activeTasks.slice(0, 5).forEach(task => {
+            statusMessage += `🔸 **${task.title}**\n`;
+            statusMessage += `   👤 ${task.assignedTo} | ⚡ ${task.priority} | 🎯 ${task.status}\n\n`;
+          });
+          
+          await this.bot.sendMessage(chatId, statusMessage, { parse_mode: 'Markdown' });
+        }
       }
     } catch (error) {
-      console.error('Team bonding error:', error);
+      console.error('Error handling ATOM task:', error);
+      await this.bot.sendMessage(chatId, '❌ Error processing task request. Please try again.');
+    }
+  }
+
+  async initiateAutonomousCollaboration(message, chatId, routingDecision) {
+    try {
+      await this.bot.sendMessage(chatId, '🤖 *Initiating Autonomous Agent Collaboration*\n\nAgents are discussing the best approach...', { parse_mode: 'Markdown' });
+      
+      const agents = routingDecision.agents || this.agents.slice(0, 3); // Use first 3 agents if not specified
+      
+      // Start peer-to-peer collaboration
+      for (let i = 0; i < agents.length - 1; i++) {
+        const agent1 = agents[i];
+        const agent2 = agents[i + 1];
+        
+        setTimeout(async () => {
+          try {
+            const conversationId = await this.atomCommunication.initiateConversation(
+              agent1,
+              agent2,
+              'task_collaboration',
+              { 
+                userMessage: message.text,
+                chatId,
+                collaborationType: 'autonomous'
+              }
+            );
+            
+            console.log(`Autonomous collaboration started: ${conversationId}`);
+          } catch (error) {
+            console.error(`Error starting collaboration between ${agent1} and ${agent2}:`, error);
+          }
+        }, i * 2000); // 2 second delay between conversations
+      }
+      
+      // Schedule summary after collaboration
+      setTimeout(async () => {
+        await this.provideCEOSummary(chatId, 'autonomous_collaboration');
+      }, agents.length * 2000 + 10000); // Wait for conversations + 10 seconds
+      
+    } catch (error) {
+      console.error('Error initiating autonomous collaboration:', error);
+    }
+  }
+
+  // ATOM Event Handlers
+  async handleTaskCreated(task) {
+    console.log(`📋 New task created: ${task.title} (${task.id})`);
+    
+    // Record in memory
+    await this.atomMemory.recordTaskMemory(task.id, task.assignedTo, {
+      type: 'assignment',
+      content: `Task assigned: ${task.title}`,
+      importance: task.priority === 'urgent' ? 1.0 : task.priority === 'high' ? 0.8 : 0.6,
+      context: { taskId: task.id, assignedTo: task.assignedTo },
+      tags: ['task_assignment', task.category]
+    });
+  }
+
+  async handleTaskAssigned(assignment) {
+    console.log(`👤 Task assigned: ${assignment.taskId} to ${assignment.agentId}`);
+    
+    // Notify in group chat if available
+    if (this.groupChatId) {
+      await this.bot.sendMessage(this.groupChatId, 
+        `🎯 **Task Assignment**\n\n` +
+        `📋 Task: ${assignment.task?.title || assignment.taskId}\n` +
+        `👤 Assigned to: ${assignment.agentId}\n` +
+        `⚡ Priority: ${assignment.task?.priority || 'medium'}`,
+        { parse_mode: 'Markdown' }
+      );
+    }
+  }
+
+  async handleCEOApprovalRequired(approval) {
+    console.log(`🚨 CEO approval required for task: ${approval.taskId}`);
+    
+    if (this.groupChatId) {
+      await this.bot.sendMessage(this.groupChatId, 
+        `🚨 **CEO Approval Required**\n\n` +
+        `📋 Task: ${approval.task?.title || approval.taskId}\n` +
+        `👤 Requested by: ${approval.requestedBy}\n` +
+        `📝 Reason: ${approval.reason}\n\n` +
+        `Please review and approve/reject this task.`,
+        { parse_mode: 'Markdown' }
+      );
+    }
+  }
+
+  async handleConversationStarted(conversation) {
+    console.log(`💬 Conversation started: ${conversation.conversationId} (${conversation.purpose})`);
+    
+    // Record conversation in memory for both participants
+    for (const participant of conversation.participants) {
+      await this.atomMemory.recordInteraction(participant, {
+        type: 'communication',
+        context: {
+          conversationId: conversation.conversationId,
+          purpose: conversation.purpose,
+          communicationType: 'peer_to_peer'
+        },
+        participants: conversation.participants,
+        outcome: { started: true },
+        duration: 0,
+        quality: 0.7
+      });
+    }
+  }
+
+  async handleCEOEscalation(escalation) {
+    console.log(`🚨 CEO escalation: ${escalation.reason}`);
+    
+    if (this.groupChatId) {
+      await this.bot.sendMessage(this.groupChatId, 
+        `🚨 **Escalation to CEO**\n\n` +
+        `👤 Escalated by: ${escalation.escalatedBy}\n` +
+        `📝 Reason: ${escalation.reason}\n` +
+        `🕐 Time: ${new Date(escalation.escalatedAt).toLocaleString()}\n\n` +
+        `Please review this escalation.`,
+        { parse_mode: 'Markdown' }
+      );
+    }
+  }
+
+  async handleAgentNotification(notification) {
+    console.log(`🔔 Agent notification: ${notification.agentId} - ${notification.message.content}`);
+    
+    // Could implement agent-specific notification handling here
+    // For now, just log the notification
+  }
+
+  async provideCEOSummary(chatId, summaryType = 'daily') {
+    try {
+      const summary = await this.atomTaskManager.generateDailySummary();
+      const memoryStats = this.atomMemory.getMemoryStats();
+      const commStats = this.atomCommunication.getCommunicationStats();
+      
+      const summaryMessage = 
+        `📊 **${summaryType.toUpperCase()} ATOM SUMMARY**\n\n` +
+        `📋 **Tasks:** ${summary.totalTasks} total, ${summary.activeTasks} active\n` +
+        `✅ **Completed:** ${summary.completedTasks}\n` +
+        `👥 **Agent Activity:** ${summary.agentActivity.length} agents active\n` +
+        `💬 **Conversations:** ${commStats.activeConversations} active\n` +
+        `🧠 **Memory:** ${memoryStats.totalInteractions} interactions recorded\n\n` +
+        `🎯 **Top Performing Agent:** ${summary.topPerformer?.agentId || 'N/A'}\n` +
+        `⚡ **System Status:** Fully Autonomous & Operational`;
+      
+      await this.bot.sendMessage(chatId, summaryMessage, { parse_mode: 'Markdown' });
+    } catch (error) {
+      console.error('Error providing CEO summary:', error);
     }
   }
 }
