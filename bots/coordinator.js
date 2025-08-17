@@ -126,6 +126,7 @@ class CoordinatorBot {
 
       // Smart AI-driven routing with context awareness
       const routingDecision = await this.intelligentRouting(messageText, { userId, chatId });
+      let routedAgent = 'coordinator'; // Default to coordinator
       
       if (routingDecision.action === 'team_intro') {
         // Handle team introductions specially
@@ -136,18 +137,15 @@ class CoordinatorBot {
       if (routingDecision.action === 'multi_agent') {
         // Route to multiple agents for collaboration
         await this.facilitateMultiAgentResponse(routingDecision.agents, messageText, { userId, chatId });
-        return;
-      }
-      
-      if (routingDecision.action === 'autonomous_collaboration') {
+        routedAgent = routingDecision.agents ? routingDecision.agents[0] : 'coordinator';
+      } else if (routingDecision.action === 'autonomous_collaboration') {
         // Initiate autonomous collaboration
         await this.initiateAutonomousCollaboration(msg, chatId, routingDecision);
-        return;
-      }
-      
-      if (routingDecision.targetAgent && routingDecision.targetAgent !== 'coordinator') {
+        routedAgent = 'atom_system';
+      } else if (routingDecision.targetAgent && routingDecision.targetAgent !== 'coordinator') {
         // Route to specific agent
         await this.routeToSpecificAgent(routingDecision.targetAgent, messageText, { userId, chatId });
+        routedAgent = routingDecision.targetAgent;
       } else {
         // Handle as coordinator with enhanced personality
         const response = await this.generateCoordinatorResponse(messageText, { userId, chatId });
@@ -155,13 +153,14 @@ class CoordinatorBot {
         if (response) {
           await this.bot.sendMessage(chatId, response);
         }
+        routedAgent = 'coordinator';
       }
       
       // Update conversation context
       await this.services.redis.setConversationContext(userId, {
         lastMessage: messageText,
         timestamp: Date.now(),
-        agent: routedAgent || 'coordinator'
+        agent: routedAgent
       });
       
     } catch (error) {

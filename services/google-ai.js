@@ -7,40 +7,24 @@ class GoogleAIService {
 
   // Cost-optimized model routing with latest Google models
   selectModel(task, agentId, priority = false) {
-    // High priority tasks - use Gemini 2.5 Pro with advanced search
+    // High priority tasks - use Gemini 2.5 Pro without search (not supported)
     if (priority || agentId === 'neda' || task.includes('research') || task.includes('search') || task.includes('trends')) {
       return {
         model: 'gemini-2.5-pro',
-        useSearch: true,
+        useSearch: false,
         config: {
-          thinkingConfig: { thinkingBudget: -1 },
-          tools: [{ 
-            googleSearchRetrieval: {
-              dynamicRetrievalConfig: {
-                mode: 'MODE_DYNAMIC',
-                dynamicThreshold: 0.7
-              }
-            }
-          }]
+          thinkingConfig: { thinkingBudget: -1 }
         }
       };
     }
 
-    // Important agents - use Gemini 2.5 Flash with search
+    // Important agents - use Gemini 2.5 Flash without search (not supported)
     if (agentId === 'sara' || agentId === 'coordinator' || task.includes('strategy') || task.includes('plan')) {
       return {
         model: 'gemini-2.5-flash',
-        useSearch: true,
+        useSearch: false,
         config: {
-          thinkingConfig: { thinkingBudget: -1 },
-          tools: [{ 
-            googleSearchRetrieval: {
-              dynamicRetrievalConfig: {
-                mode: 'MODE_DYNAMIC',
-                dynamicThreshold: 0.7
-              }
-            }
-          }]
+          thinkingConfig: { thinkingBudget: -1 }
         }
       };
     }
