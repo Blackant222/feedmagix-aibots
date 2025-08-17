@@ -2,7 +2,9 @@ const TelegramBot = require('node-telegram-bot-api');
 
 class LalehBot {
   constructor(token, services) {
-    this.bot = new TelegramBot(token, { polling: false }); // Disable polling to prevent conflicts
+    // Use polling only in development, webhook in production
+    const usePolling = process.env.NODE_ENV !== 'production';
+    this.bot = new TelegramBot(token, { polling: false }); // Polling handled by coordinator
     this.services = services;
     this.agentId = 'laleh';
     this.personality = this.loadPersonality();

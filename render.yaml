@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: petmagix-ai-bots
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: WEBHOOK_URL
+        fromService:
+          type: web
+          name: petmagix-ai-bots
+          property: host
+    healthCheckPath: /health
+    autoDeploy: false

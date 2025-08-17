@@ -82,6 +82,14 @@ class PetMagixSystem {
         console.log(`🧠 ${agentId} personality loaded`);
       }
     }
+
+    // Setup webhooks for production environment
+    if (process.env.NODE_ENV === 'production') {
+      await this.setupWebhooks();
+    } else {
+      // Enable polling for development
+      await this.enablePolling();
+    }
   }
 
   setupServer() {
@@ -93,18 +101,82 @@ class PetMagixSystem {
         status: 'healthy', 
         timestamp: new Date().toISOString(),
         service: 'PetMagix AI Team',
-        bots: Object.keys(this.bots)
+        bots: Object.keys(this.bots),
+        mode: process.env.NODE_ENV === 'production' ? 'webhook' : 'polling'
       });
     });
 
-    // Webhook endpoint
-    this.app.post('/webhook/:botId', (req, res) => {
-      res.sendStatus(200);
+    // Webhook endpoint for production
+    this.app.post('/webhook/:botId', async (req, res) => {
+      try {
+        const botId = req.params.botId;
+        const update = req.body;
+        
+        // Route to coordinator for processing
+        if (this.bots.coordinator && update.message) {
+          await this.bots.coordinator.processWebhookUpdate(update, botId);
+        }
+        
+        res.sendStatus(200);
+      } catch (error) {
+        console.error('Webhook error:', error);
+        res.sendStatus(500);
+      }
     });
 
     this.app.listen(this.port, () => {
       console.log(`🌐 Server running on port ${this.port}`);
+      console.log(`📡 Mode: ${process.env.NODE_ENV === 'production' ? 'Webhook' : 'Polling'}`);
     });
+  }
+
+  async setupWebhooks() {
+    const baseUrl = process.env.WEBHOOK_URL || process.env.RENDER_EXTERNAL_URL;
+    if (!baseUrl) {
+      console.warn('⚠️ No webhook URL configured for production');
+      return;
+    }
+
+    console.log('🔗 Setting up webhooks for production...');
+    
+    const botConfigs = [
+      { name: 'coordinator', token: process.env.COORDINATOR_BOT_TOKEN },
+      { name: 'sara', token: process.env.SARA_BOT_TOKEN },
+      { name: 'amir', token: process.env.AMIR_BOT_TOKEN },
+      { name: 'laleh', token: process.env.LALEH_BOT_TOKEN },
+      { name: 'navid', token: process.env.NAVID_BOT_TOKEN },
+      { name: 'neda', token: process.env.NEDA_BOT_TOKEN }
+    ];
+
+    for (const config of botConfigs) {
+      if (config.token && this.bots[config.name]) {
+        try {
+          const webhookUrl = `${baseUrl}/webhook/${config.name}`;
+          await this.bots[config.name].bot.setWebHook(webhookUrl);
+          console.log(`✅ Webhook set for ${config.name}: ${webhookUrl}`);
+        } catch (error) {
+          console.error(`❌ Failed to set webhook for ${config.name}:`, error.message);
+        }
+      }
+    }
+  }
+
+  async enablePolling() {
+    console.log('🔄 Enabling polling for development...');
+    
+    for (const [botName, bot] of Object.entries(this.bots)) {
+      if (bot && bot.bot) {
+        try {
+          // Clear any existing webhooks first
+          await bot.bot.deleteWebHook();
+          // Start polling
+          bot.bot.startPolling();
+          console.log(`✅ Polling enabled for ${botName}`);
+        } catch (error) {
+          console.error(`❌ Failed to enable polling for ${botName}:`, error.message);
+        }
+      }
+    }
   }
 
   async runTeamBriefing() {

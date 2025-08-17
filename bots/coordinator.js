@@ -2,7 +2,9 @@ const TelegramBot = require('node-telegram-bot-api');
 
 class CoordinatorBot {
   constructor(token, services) {
-    this.bot = new TelegramBot(token, { polling: true });
+    // Use polling only in development, webhook in production
+    const usePolling = process.env.NODE_ENV !== 'production';
+    this.bot = new TelegramBot(token, { polling: usePolling });
     this.services = services;
     this.groupChatId = process.env.GROUP_CHAT_ID;
     this.setupHandlers();
@@ -98,6 +100,28 @@ class CoordinatorBot {
     } catch (error) {
       console.error('Error processing message:', error);
       await this.bot.sendMessage(msg.chat.id, '❌ خطایی در پردازش پیام رخ داد.');
+    }
+  }
+
+  async processWebhookUpdate(update, botId) {
+    try {
+      if (update.message) {
+        const msg = update.message;
+        
+        // Only process messages from the group chat
+        if (msg.chat.id.toString() !== this.groupChatId || msg.from.is_bot) {
+          return;
+        }
+
+        // Rate limiting
+        const canProceed = await this.services.redis.checkRateLimit(msg.from.id);
+        if (!canProceed) return;
+
+        // Process the message
+        await this.processMessage(msg);
+      }
+    } catch (error) {
+      console.error(`Webhook processing error for ${botId}:`, error);
     }
   }
 
